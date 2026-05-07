@@ -26,7 +26,7 @@ My research interests lie in high-performance computing. During my undergraduate
 🏆 Honors & Awards
 ======
 
-- *2024:* Gold Award of the 2024 China International College Students Innovation Competition, Shanghai Division. As a cofounder of [Emagen](https://emagen.ai/), I received a $300,000 investment from [MiraclePlus](https://www.miracleplus.com/)I spend exciting time with my friends in [Emagen](https://emagen.ai/) in 2024, anyone who is enthusiastic about changing the world. Hope they become better now!
+- *2024:* Gold Award of the 2024 China International College Students Innovation Competition, Shanghai Division. As a cofounder of [Emagen](https://emagen.ai/), I received a $300,000 investment from [MiraclePlus](https://www.miracleplus.com/). I spend exciting time with my friends in [Emagen](https://emagen.ai/) in 2024, anyone who is enthusiastic about changing the world. Hope they become better now!
 
 
 📖 Educations
