@@ -38,8 +38,9 @@ My research interests lie in high-performance computing. During my undergraduate
 ✨ My Life
 ======
 
-I am a person who genuinely enjoys life beyond research. I am especially passionate about basketball, strength training, running, hiking, and mountain trips. For me, these moments are not separate from academic life; they are part of how I stay energetic, curious, and grounded. Here are some key moments/timeline points for me (from 2024).
+I am a person who genuinely enjoys life beyond research. I am especially passionate about basketball, strength training, running, hiking, and mountain trips. For me, these moments are not separate from academic life; they are part of how I stay energetic, curious, and grounded. I record some of the bright moments in my life on my [My Life page](/my-life/) starting from 2024.
 
+<!-- 
 - *2024.05*, I saw David Tao's concert in Wuxi. By the way, I saw DT in Beijing, Nanjing, Hefei. [Photo With Director Liu and Yang Han](/files/DT_concert_in_wuxi.jpg)
 - *2024 09*, as a cofounder of Emagen, I received a $300,000 investment from [MiraclePlus](https://www.miracleplus.com/).
 - *2024 10*, I started to work with [Prof. Sun Shixuan](https://shixuansun.github.io/) and [Liu Yushi](https://ziliuziliu.github.io/).
@@ -50,7 +51,6 @@ I am a person who genuinely enjoys life beyond research. I am especially passion
 
 
 
-
-
+ -->
 
 
