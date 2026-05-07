@@ -11,54 +11,25 @@ redirect_from:
 
 Education
 ======
-* Ph.D in Version Control Theory, GitHub University, 2018 (expected)
-* M.S. in Jekyll, GitHub University, 2014
-* B.S. in GitHub, GitHub University, 2012
+- **2026.09 - 2029.06 (expected):** Master in Computer Science, Shanghai Jiao Tong University.
+- **2022.09 - 2026.06 (expected):** Bachelor in Information Security, Shanghai Jiao Tong University.
 
-Work experience
+Research Interests
 ======
-* Spring 2024: Academic Pages Collaborator
-  * GitHub University
-  * Duties includes: Updates and improvements to template
-  * Supervisor: The Users
+- High-performance computing.
+- Graph computing, especially its integration with serverless computing.
+- High-performance LLM systems, particularly efficient system and kernel design.
 
-* Fall 2015: Research Assistant
-  * GitHub University
-  * Duties included: Merging pull requests
-  * Supervisor: Professor Hub
-
-* Summer 2015: Research Assistant
-  * GitHub University
-  * Duties included: Tagging issues
-  * Supervisor: Professor Git
-  
-Skills
+News
 ======
-* Skill 1
-* Skill 2
-  * Sub-skill 2.1
-  * Sub-skill 2.2
-  * Sub-skill 2.3
-* Skill 3
+- **2026.03:** FaaSBoard was accepted at SIGMOD 2026.
 
 Publications
 ======
-  <ul>{% for post in site.publications reversed %}
-    {% include archive-single-cv.html %}
-  {% endfor %}</ul>
-  
-Talks
+- **SIGMOD 2026.** *FaaSBoard: Efficient Graph Processing with a Disaggregated Architecture on Serverless Services.* Yushi Liu<sup>*</sup>, **Yikang Ruan**<sup>*</sup>, Letian Ruan, Zijun Li, Sen Gao, Weihao Cui, Shixuan Sun, Quan Chen, Shuo Quan, Jie Wu, Bingsheng He, and Minyi Guo. [Paper to appear](/files/FaaSBoard_SIGMOD2026_V4mod177.pdf) / [Code](https://github.com/SJTU-Liquid/FaaSBoard)
+
+- <sup>*</sup> Equal contribution.
+
+Honors & Awards
 ======
-  <ul>{% for post in site.talks reversed %}
-    {% include archive-single-talk-cv.html  %}
-  {% endfor %}</ul>
-  
-Teaching
-======
-  <ul>{% for post in site.teaching reversed %}
-    {% include archive-single-cv.html %}
-  {% endfor %}</ul>
-  
-Service and leadership
-======
-* Currently signed in to 43 different slack teams
+- **2024:** Gold Award of the 2024 China International College Students Innovation Competition, Shanghai Division.
