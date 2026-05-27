@@ -35,8 +35,8 @@ author:
   # Academic websites
   academia         : # URL
   arxiv            : # URL - Update with the correct link to your profile
-  googlescholar    :
-  googlescholar_pending : true
+  googlescholar    : "https://scholar.google.com/citations?user=gn7TP9EAAAAJ&hl=en"
+  googlescholar_pending : false
   inspire-hep      : # URL
   impactstory      : # URL
   orcid            : "https://orcid.org/0009-0001-6337-9340"
