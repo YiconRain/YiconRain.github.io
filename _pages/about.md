@@ -14,7 +14,7 @@ My research interests lie in high-performance computing. During my undergraduate
 🔥 News
 ======
 
-- *2026.06:* I'm in Bengaluru to attend SIGMOD.
+- *2026.06:* I'm in Bengaluru to attend SIGMOD'26.
 - *2026.03:* **FaaSBoard** was accepted at SIGMOD'26.
 
 📝 Publications
@@ -34,8 +34,8 @@ My research interests lie in high-performance computing. During my undergraduate
 📖 Educations
 ======
 
-- **2026.09 - 2029.03 (expected),** Master in Computer Science, Shanghai Jiao Tong University.
-- **2022.09 - 2026.06,** Bachelor in Information Security, Shanghai Jiao Tong University.
+- **2026.09 - 2029.03 (expected),** M.S. in Computer Science, Shanghai Jiao Tong University.
+- **2022.09 - 2026.06,** B.Eng. in Information Security, Shanghai Jiao Tong University.
 
 ✨ My Life
 ======
