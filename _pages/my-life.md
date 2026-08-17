@@ -8,7 +8,7 @@ author_profile: true
 
 I am a person who genuinely enjoys life beyond research. I am especially passionate about basketball, strength training, running, hiking, and mountain trips. For me, these moments are not separate from academic life; they are part of how I stay energetic, curious, and grounded. Here are some key moments/timeline points for me (from 2024).
 
-- *2026 06*, I finished my bachelor's degree. [Photo here](/files/SIGMOD.jpg) with [Qiu Bolin](https://scholar.google.com/citations?user=GxM3q_oAAAAJ&hl=en), [Hu JinMing](https://jmh2003.github.io/), Chen Wei, Wang Bowen. Time flys.
+- *2026 06*, I finished my bachelor's degree. Photo here with [Qiu Bolin](https://scholar.google.com/citations?user=GxM3q_oAAAAJ&hl=en), [Hu JinMing](https://jmh2003.github.io/), Chen Wei, Wang Bowen. Time flys.
 - *2026 06*, Glad to meet you and have fun with my new friends in SIGMOD, Bengaluru, India. [Photo with you](/files/SIGMOD.jpg)
 - *2026 04*, I completed my first fully-loaded multi-day hike at Tianmu Sanjian in Hangzhou. [Photo Myself](/files/tianmu.jpg)
 - *2026 01*, I cycled **500 km** from SJTU Minhang Campus back to my hometown (Guangfeng, Shangrao, Jiangxi) for the Chinese New Year — a **4-day ride**. Glad to meet Junjie and Jason. [Photo with Junjie and Jason](/files/riding_home.jpg)
