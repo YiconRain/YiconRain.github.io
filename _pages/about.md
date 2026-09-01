@@ -9,7 +9,7 @@ redirect_from:
 
 I am now a first-year master's student  at School of Computer Science, Shanghai Jiao Tong University (SJTU), work with [Prof. Sun Shixuan](https://shixuansun.github.io/) at the [Emerging Parallel Computing Center](http://epcc.sjtu.edu.cn/). I received my B.Eng. in Information Security from Shanghai Jiao Tong University in 2026, also under the supervision of [Prof. Sun Shixuan](https://shixuansun.github.io/).
 
-My research interests lie in high-performance computing. During my undergraduate studies, I worked on graph computing and serverless computing. Currently, I am interested in high-performance LLM systems, with a particular focus on efficient system and kernel design.
+My research interests lie in high-performance computing. During my undergraduate studies, I worked on graph computing and serverless computing. Currently, I am interested in high-performance LLMsys, especially in speculative decoding and high-performance kernel design.
 
 🔥 News
 ======
