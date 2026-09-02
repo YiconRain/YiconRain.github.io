@@ -9,18 +9,61 @@ layout: single
     margin: 0 0 0.5em 1em;
     font-size: 0.85em;
   }
-  .blog-lang-toggle a {
-    display: inline-block;
+  .blog-lang-toggle button {
     padding: 0.25em 0.9em;
     border: 1px solid;
     border-radius: 1.5em;
-    text-decoration: none;
+    background: transparent;
+    cursor: pointer;
+    font: inherit;
   }
-  .blog-lang-toggle a:hover {
+  .blog-lang-toggle button:hover {
     background: rgba(0, 0, 0, 0.05);
   }
 </style>
 
-{% include lang-toggle.html %}
+{% assign parts = content | split: '<hr class="blog-lang-split">' %}
 
-{{ content }}
+{% if parts.size > 1 %}
+  <div class="blog-lang-toggle">
+    <button id="blog-lang-btn" type="button" aria-label="Switch language"></button>
+  </div>
+  <div id="blog-lang-en" lang="en">{{ parts[0] }}</div>
+  <div id="blog-lang-zh" lang="zh" hidden>{{ parts[1] }}</div>
+
+  <script>
+  (function () {
+    var titles = {
+      en: {{ page.title | jsonify }},
+      zh: {{ page.title_zh | jsonify }}
+    };
+    var en = document.getElementById('blog-lang-en');
+    var zh = document.getElementById('blog-lang-zh');
+    var btn = document.getElementById('blog-lang-btn');
+    var h1 = document.querySelector('h1.page__title');
+    var cur = localStorage.getItem('blog-lang');
+    if (cur !== 'en' && cur !== 'zh') cur = 'en';
+
+    function show(lang) {
+      var isZh = lang === 'zh';
+      zh.hidden = !isZh;
+      en.hidden = isZh;
+      btn.textContent = isZh ? 'English' : '中文';
+      btn.setAttribute('lang', isZh ? 'en' : 'zh');
+      var t = titles[lang];
+      if (t) {
+        if (h1) h1.textContent = t;
+        if (t !== document.title) document.title = t;
+      }
+      localStorage.setItem('blog-lang', lang);
+    }
+
+    btn.addEventListener('click', function () {
+      show(en.hidden ? 'en' : 'zh');
+    });
+    show(cur);
+  })();
+  </script>
+{% else %}
+  {{ content }}
+{% endif %}

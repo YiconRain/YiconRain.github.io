@@ -5,25 +5,17 @@ permalink: /blog/
 author_profile: false
 ---
 
-{% include base_path %}
+{% assign posts = site.blogs | sort: "date" | reverse %}
 
-{% assign blog_groups = site.blogs | sort: "date" | reverse | group_by: "slug" %}
-
-{% for group in blog_groups %}
-  {% comment %}Prefer the English version as the entry link; fall back to whatever exists.{% endcomment %}
-  {% assign entry = group.items | first %}
-  {% for item in group.items %}
-    {% if item.lang == "en" %}{% assign entry = item %}{% endif %}
-  {% endfor %}
+{% for post in posts %}
   <article style="margin-bottom: 2.2em; padding-bottom: 1.4em; border-bottom: 1px solid #f0f0f0;">
     <h2 style="margin-bottom: 0.15em;">
-      <a href="{{ base_path }}/blog/{{ group.name }}-{% if entry.lang == 'en' %}en{% else %}zh{% endif %}/">{{ entry.title }}</a>
+      <a href="{{ post.url }}">{{ post.title }}</a>
     </h2>
     <p style="margin: 0 0 0.6em; color: #6c757d; font-size: 0.85em;">
-      <time>{{ entry.date | date: "%Y-%m-%d" }}</time>
-      {% if group.items.size > 1 %}<span> · English / 中文</span>{% endif %}
+      <time>{{ post.date | date: "%Y-%m-%d" }}</time>
     </p>
-    <p style="margin: 0;">{{ entry.description | truncate: 320 }}</p>
+    <p style="margin: 0;">{{ post.description | truncate: 320 }}</p>
   </article>
 {% else %}
   <p>No blog posts yet.</p>
