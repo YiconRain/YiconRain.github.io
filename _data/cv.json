@@ -3,9 +3,9 @@
     "name": "Yikang Ruan",
     "label": "Master's student in Computer Science at Shanghai Jiao Tong University",
     "email": "yikang.ruan@sjtu.edu.cn",
-    "phone": "",
+    "phone": "(+86) 189-0703-7207",
     "website": "https://yiconrain.github.io",
-    "summary": "Master's student in Computer Science at Shanghai Jiao Tong University",
+    "summary": "My research interests lie in high-performance computing. During my undergraduate studies, I worked on graph computing, particularly its integration with serverless computing. Currently, I am interested in high-performance LLM systems, especially in speculative decoding and high-performance kernel design.",
     "location": {
       "address": "",
       "postalCode": "",
@@ -35,7 +35,7 @@
   "education": [
     {
       "institution": "Shanghai Jiao Tong University",
-      "area": "Master in Computer Science",
+      "area": "M.S. in Computer Science",
       "studyType": "",
       "startDate": "2026-09",
       "endDate": "2029-06",
@@ -44,7 +44,7 @@
     },
     {
       "institution": "Shanghai Jiao Tong University",
-      "area": "Bachelor in Information Security",
+      "area": "B.Eng. in Information Security",
       "studyType": "",
       "startDate": "2022-09",
       "endDate": "2026-06",
@@ -54,20 +54,7 @@
   ],
   "skills": [],
   "languages": [],
-  "interests": [
-    {
-      "name": "High-performance computing",
-      "keywords": []
-    },
-    {
-      "name": "Graph computing and serverless systems",
-      "keywords": []
-    },
-    {
-      "name": "High-performance LLM systems",
-      "keywords": []
-    }
-  ],
+  "interests": [],
   "references": [],
   "publications": [
     {
@@ -75,10 +62,24 @@
       "publisher": "SIGMOD 2026",
       "releaseDate": "2026-03-01",
       "website": "https://yiconrain.github.io/files/FaaSBoard_SIGMOD2026_V4mod177.pdf",
-      "summary": "Yushi Liu*, Yikang Ruan*, Letian Ruan, Zijun Li, Sen Gao, Weihao Cui, Shixuan Sun, Quan Chen, Shuo Quan, Jie Wu, Bingsheng He, and Minyi Guo. Paper to appear."
+      "summary": "Yushi Liu*, Yikang Ruan*, Letian Ruan, Zijun Li, Sen Gao, Weihao Cui, Shixuan Sun, Quan Chen, Shuo Quan, Jie Wu, Bingsheng He, Minyi Guo. FaaSBoard is a graph processing system with a disaggregated serverless architecture that decouples data loading, computation, and communication, developed fully on AWS using Lambda, Fargate, and other cloud infrastructure."
+    }
+  ],
+  "portfolio": [
+    {
+      "name": "Reassessing Megakernel Headroom after CUDA Graphs",
+      "category": "Ongoing Research",
+      "date": "2026-07",
+      "description": "We characterize kernel-launch overhead in LLM serving and show that CUDA Graphs reduce host launches to 17–18 per decode step and dense-model GPU bubbles to 1–3%, indicating that Megakernel benefits do not stem simply from replacing many kernels with one.",
+      "url": "https://yiconrain.github.io/blog/kernel-launch/"
+    },
+    {
+      "name": "Reconstructing Persistence with PDL",
+      "category": "Ongoing Research",
+      "date": "2026",
+      "description": "A PDL-based approach that reconstructs Megakernel scheduling with an 81-kernel CUDA Graph, implemented on ThunderKittens for Llama-3.2-1B decoding on a single H100 and achieving 97.4% of the persistent Megakernel's end-to-end throughput."
     }
   ],
   "presentations": [],
-  "teaching": [],
-  "portfolio": []
+  "teaching": []
 }
