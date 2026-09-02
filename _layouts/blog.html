@@ -1,0 +1,26 @@
+---
+layout: single
+---
+{% include base_path %}
+
+<style>
+  .blog-lang-toggle {
+    float: right;
+    margin: 0 0 0.5em 1em;
+    font-size: 0.85em;
+  }
+  .blog-lang-toggle a {
+    display: inline-block;
+    padding: 0.25em 0.9em;
+    border: 1px solid;
+    border-radius: 1.5em;
+    text-decoration: none;
+  }
+  .blog-lang-toggle a:hover {
+    background: rgba(0, 0, 0, 0.05);
+  }
+</style>
+
+{% include lang-toggle.html %}
+
+{{ content }}
