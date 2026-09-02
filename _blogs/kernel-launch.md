@@ -1,26 +1,26 @@
 ---
-title: "17–18 Host Launch API Calls per Decode Step: Reassessing Megakernel Headroom after CUDA Graphs"
+title: "Reassessing Megakernel Headroom after CUDA Graphs"
 title_zh: "CUDA Graph 之后 MegaKernel 收益空间的再评估"
 date: 2026-07-10
 permalink: /blog/kernel-launch/
-description: "On a single H100, CUDA Graphs reduce host launch API calls to 17–18 per decode step and lower GPU bubble to ~1%–3% for medium-to-large dense models. For graph-compatible decode workloads, a Megakernel has limited headroom if its only advantage is a further reduction in kernel count."
+description: "On a single H100, CUDA Graphs reduce the number of host launch API calls to 17–18 per decode step and lower the GPU bubble ratio to approximately 1%–3% for medium-to-large dense models. Therefore, for decode workloads compatible with CUDA Graphs, the headroom available to Megakernels solely from further reducing kernel count is limited."
 ---
 
-**TL;DR.** On a single H100, CUDA Graphs reduce the number of host launch API calls to 17–18 per decode step and lower GPU bubble to approximately 1%–3% for medium-to-large dense models. For graph-compatible decode workloads, a Megakernel therefore has limited headroom if its only advantage is a further reduction in kernel count. Larger residual bubbles appear in short-prompt prefill, small models, and MoE workloads, where roughly 10% of the measured window can remain as unattributed GPU idle time even with CUDA Graphs.
 
-One of the central arguments for Megakernels is that reducing kernel count lowers launch and host-side overhead. This article uses Nsight Systems traces to quantify GPU activity, launch API intervals, and the unattributed idle residual, then asks three questions: 
-- How should these metrics be defined? 
-- How large are they across models and workloads? 
-- Once CUDA Graphs are available, what theoretical headroom remains for a Megakernel? 
+**TL;DR.** On a single H100, CUDA Graphs reduce the number of host launch API calls to 17–18 per decode step and lower the GPU bubble ratio to approximately 1%–3% for medium-to-large dense models. Therefore, for decode workloads compatible with CUDA Graphs, the headroom available to Megakernels solely from further reducing kernel count is limited.
 
+One of the central arguments for Megakernels is that reducing kernel count lowers launch and host-side overhead. We use Nsight Systems traces to quantify GPU activity, launch APIs, and GPU idle time, and ask three questions:
+
+- How should these metrics be defined?
+- How large are they across models and workloads?
+- Once CUDA Graphs are available, how much theoretical headroom remains for Megakernels?
 
 ## 1. From Kernel Launch to GPU Bubble
 
 For a single explicitly synchronized kernel whose stages do not overlap, end-to-end latency can be approximated as:
 
 ```text
-E2E latency ≈ CPU launch + other launch-path overhead
-            + GPU execution + host-side processing/synchronization
+E2E latency ≈ CPU launch + other launch-path overhead + GPU execution + host-side processing/synchronization
 ```
 
 In a serving pipeline, CPU launch and GPU execution usually overlap asynchronously. End-to-end latency is therefore determined by the critical path and cannot be obtained by directly summing accumulated component times.
@@ -58,13 +58,11 @@ The CPU produces commands and the GPU consumes them. Their relative rates determ
 
 | Metric | Definition and interpretation |
 | --- | --- |
-| `e2e_ms` | `max(end) - min(start)` over host runtime API events in the captured window, which approximates wall-clock time for the measured `generate()` call; the prefill-only slice uses a separate truncation boundary. |
-| `total_kernel_gpu_ms` | Sum of all kernel durations. Overlapping kernels on multiple streams are counted more than once, so this value may exceed `e2e_ms` and must not be interpreted as GPU busy time. |
-| `launch_overhead_ms` | Sum of host API durations for `cudaLaunchKernel*`, `cudaGraphLaunch*`, and `cuLaunchKernel*`. An individual call usually takes 2–10 μs when the queue is uncongested, but command-buffer backpressure can increase it to milliseconds or even seconds. This metric can either overestimate or underestimate the true critical-path cost. |
+| `e2e_ms` | End-to-end latency. |
 | `gpu_busy_ms` | Union of all GPU activity intervals, including kernels, memcpy, and memset. Overlapping intervals are counted once, so `gpu_busy_ms <= e2e_ms`. |
 | `gpu_bubble_ratio` | Fraction of the end-to-end interval with no GPU activity. It observes system-level idle time but does not by itself identify the causal contribution of launch, scheduling, framework execution, synchronization, or GPU queueing. |
-| `unhidden_launch_api_ms` | Intersection of launch API intervals with GPU-idle intervals. It is a proxy for exposed launch wall time, not proof of causal critical-path loss. |
-| `other_host_idle_ms` | Residual defined as `gpu_bubble_ms - unhidden_launch_api_ms`. D2H copies, sampling, scheduling, attention metadata planning, Python runtime execution, and GPU-side queueing are possible sources, not separately measured attributions. |
+| `unhidden_launch_api_ms` | Time spent in launch operations that is not hidden by GPU activity. |
+| `other_host_idle_ms` | Host overhead outside kernel launch. Possible sources include D2H copies, sampling, scheduling, attention metadata planning, the Python runtime, and GPU-side queueing. |
 
 The core relationships are:
 
@@ -77,7 +75,7 @@ gpu_bubble_ratio
   = gpu_bubble_ms / e2e_ms
 ```
 
-We compute the union of GPU activity intervals rather than summing durations that may double-count concurrent operations. The experimental platform does not expose the required hardware counters, so we do not report SM utilization. Our focus is system-level GPU idle time, not the SM efficiency of an individual kernel.
+Our Vast.ai experimental platform does not expose the required hardware counters, so we do not use SM utilization. This blog focuses on system-level idle time rather than the SM efficiency of individual kernels.
 
 ### 2.2 Experimental Setup
 
@@ -90,8 +88,6 @@ We compute the union of GPU activity intervals rather than summing durations tha
 | Prefill-dominant | BS=1, prompt ∈ {16, 256, 1k, 4k, 8k} |
 | Decode | BS=1, prompt=16, decode ∈ {128, 512} |
 | Batch decode | BS ∈ {1, 4, 8, 16}, prompt=16, decode ∈ {128, 512} |
-
-The historically named `bs1_p*_d0` prefill-dominant cases actually execute prefill and generate one token. The figures and tables in Section 4 truncate each trace before the decode tail and report only the prefill slice; the case-level table in Section 6 retains the complete `generate()` path.
 
 ## 3. Decode: CUDA Graphs Eliminate Most GPU Bubble
 
@@ -129,13 +125,21 @@ The tables below provide per-step metrics for decode=512. Each paired value is *
 | Qwen3-30B-A3B | 31.37 → 0.36 | 3.050 → 0.066 | 28.32 → 0.29 |
 | Qwen3.5-27B | 23.73 → 0.32 | 2.244 → 0.014 | 21.49 → 0.31 |
 
-The results support three direct conclusions:
+Our analysis yields the following conclusions:
 
-1. During eager decode, `other_host_idle_ms` is substantially larger than `unhidden_launch_api_ms`: most GPU idle occurs while the host is outside the launch APIs being counted. This residual alone cannot separate the contributions of scheduling, sampling, synchronization, framework execution, or GPU-side queueing.
-2. CUDA Graphs reduce host launch API calls per step from 375–976 to 17–18. For Qwen3-8B, the exposed launch time under CG is only 0.014 ms, approximately 0.2% of its 6.45 ms TPOT; other host idle time is 0.14 ms, approximately 2%.
-3. CG reduces the bubble of medium-to-large dense models to 1.6%–2.4%, whereas small models and MoE retain 7.8%–14.0%. The claim that little headroom remains therefore applies to the former and must not be generalized to every model.
+1. During eager decode, `other_host_idle_ms` is substantially larger than `unhidden_launch_api_ms`. This indicates that the bottleneck is not the raw kernel-launch API time itself, but the scheduler, sampling, synchronization, and framework logic between launch calls that leaves the GPU waiting.
+2. The eager-to-CUDA-Graph end-to-end speedup is substantial. Small-model and MoE decode are the most launch/host-bound and therefore achieve the largest speedups. CUDA Graphs provide less benefit for larger dense models, but the gains remain significant.
+3. CUDA Graphs reduce host launch API calls from 375–976 to 17–18 per step and substantially lower GPU bubble time. For example, Qwen3-8B has only 2.4% GPU bubble after CUDA Graphs are enabled.
+4. The CUDA Graph bubble falls to 1.6%–2.4% for dense models, while ultra-small models and MoE retain 7.8%–14.0%. This partially explains why most current Megakernels are evaluated on—and benefit—ultra-small models, and why work such as MegaMoE is meaningful.
 
-For graph-compatible decode, the residual bubble after CG is a theoretical time bound that no optimization eliminating GPU idle can exceed. Only the portion causally attributed to launch or scheduling can potentially be recovered by a Megakernel, whose GPU-side scheduling and synchronization costs must also be included.
+**What about Megakernels?**
+
+**Megakernels can certainly reduce kernel-launch overhead and CPU-launch overhead, but CUDA Graphs already perform well enough.**
+
+1. **First, SGLang already hides kernel-launch overhead effectively behind kernel execution.**
+2. **Second, after enabling CUDA Graphs, the number of host launch API calls per decode step is already sufficiently small, and the remaining unhidden kernel-launch and host-synchronization overhead is also sufficiently low.**
+
+**At this point, abandoning CPU-side control and moving scheduling entirely into the GPU runtime to recover roughly 2% host-synchronization overhead may instead reduce serving-system performance by introducing more complex GPU scheduling and synchronization. The tradeoff is unlikely to be worthwhile.**
 
 ### 3.2 Long Context, BS=1
 
@@ -171,7 +175,9 @@ Paired values remain **eager → CG**. All timing metrics are reported per step 
 | Qwen3-30B-A3B | 33.86 → 0.35 | 3.269 → 0.064 | 30.60 → 0.28 |
 | Qwen3.5-27B | 15.34 → 0.27 | 1.541 → 0.013 | 13.80 → 0.26 |
 
-As context grows, KV reads and GPU work become longer while bubble ratio falls. This trend is consistent with fixed system costs being amortized, but the residual has not been decomposed by cause. For Qwen3-14B, CG speedup falls from 1.37× with a short context to 1.09×. Small models and MoE still obtain substantial eager → CG speedups—4.73× for Qwen3-0.6B and 7.25× for Qwen3-30B-A3B—showing greater sensitivity to graph capture.
+The results show that long-context KV-cache reads amortize part of the launch/host bubble, but do not eliminate it completely. For larger dense models, increasing the prompt from 16 to 8k makes decode more GPU-execution- or KV-read-bound. For example, the Qwen3-14B speedup falls from 1.37× to 1.09×, indicating that the incremental benefit of CUDA Graphs has already decreased substantially. Small models and MoE, however, remain clearly launch/host-bound: Qwen3-0.6B still achieves a 4.73× speedup, and Qwen3-30B-A3B still achieves 7.25×.
+
+**Our claim remains unchanged: for CUDA Graph decode, even with a long decode context, CUDA Graphs can still substantially reduce kernel-launch and host-side overhead. Consequently, the headroom available to Megakernels from reducing kernel count to lower kernel-launch and host-side overhead is limited.**
 
 ### 3.3 Batch Sweep
 
@@ -202,76 +208,28 @@ The following tables report per-step metrics at BS=8, prompt=16, and decode=512;
 | Qwen3-30B-A3B | 34.32 → 0.44 | 3.366 → 0.080 | 30.95 → 0.36 |
 | Qwen3.5-27B | 26.53 → 0.10 | 2.779 → 0.004 | 23.75 → 0.09 |
 
-Within the tested batch-size range, BS=8 follows the same trend as BS=1: small models and MoE retain substantial eager → CG speedups, while larger dense models benefit less. Increasing batch size alone does not eliminate sensitivity to graph capture in these cases.
+The BS=8 results are broadly consistent with BS=1 at decode=512: for decode, increasing the batch size does not eliminate the value of CUDA Graphs.
 
-## 4. Prefill: GPU Bubble Varies with Prompt Length
+## 4. Connection to MPK End-to-End Results
 
-The Qwen3 models use piecewise CUDA Graphs by default in SGLang, whereas Qwen3.5-27B falls back to a path without piecewise graphs. This distinction is an important boundary when interpreting the results.
+Earlier TPOT comparisons among MPK, vLLM, and SGLang are consistent with the profiling results above.
 
-<p align="center">
-  <img src="/images/blog/kernel-launch/fig3_prefill_bubble.png" alt="GPU bubble ratio for batch-one prefill" style="width: 100%; max-width: 780px; height: auto;">
-</p>
-<p align="center"><em>Figure 9. GPU bubble ratio for BS=1 prefill.</em></p>
-
-<p align="center">
-  <img src="/images/blog/kernel-launch/fig3_prefill_e2e.png" alt="End-to-end latency for batch-one prefill" style="width: 100%; max-width: 780px; height: auto;">
-</p>
-<p align="center"><em>Figure 10. End-to-end latency for BS=1 prefill.</em></p>
-
-Consider the BS=1, prompt=8k prefill measurements (the Qwen3 models use piecewise CUDA Graphs, whereas Qwen3.5-27B uses the fallback path):
-
-| Model | Prefill-slice E2E (ms) | Host launch API calls/slice | `cudaGraphLaunch` calls/slice |
-| --- | ---: | ---: | ---: |
-| Qwen3-0.6B | 51.11 | 168 | 29 |
-| Qwen3-1.7B | 82.69 | 168 | 29 |
-| Qwen3-8B | 286.74 | 208 | 37 |
-| Qwen3-14B | 483.14 | 228 | 41 |
-| Qwen3-30B-A3B | 221.47 | 220 | 49 |
-| Qwen3.5-27B | 733.65 | 1,683 | 0 |
-
-| Model | GPU bubble/slice (ms) | GPU bubble (%) | Unhidden launch API/slice (ms) | Non-launch idle residual/slice (ms) |
-| --- | ---: | ---: | ---: | ---: |
-| Qwen3-0.6B | 7.47 | 14.6% | 0.21 | 7.26 |
-| Qwen3-1.7B | 8.58 | 10.4% | 0.21 | 8.36 |
-| Qwen3-8B | 6.89 | 2.4% | 0.14 | 6.75 |
-| Qwen3-14B | 6.69 | 1.4% | 0.15 | 6.54 |
-| Qwen3-30B-A3B | 8.09 | 3.7% | 0.18 | 7.92 |
-| Qwen3.5-27B | 11.48 | 1.6% | 0.98 | 10.49 |
-
-Prefill bubble varies strongly with prompt length: the observed bubble is larger for short prompts, then falls as GEMM and attention kernels grow longer. This trend is consistent with fixed system costs being amortized, but the residual has not been decomposed by cause. At prompt=8k, the bubble falls to 1%–3% for Qwen3-8B, Qwen3-14B, and Qwen3.5-27B, but remains 10.4%–14.6% for Qwen3-0.6B/1.7B. Short-to-medium prompts and smaller models therefore form candidate optimization regimes that require further causal attribution.
-
-## 5. Connection to End-to-End MPK Results
-
-Earlier TTFT and TPOT comparisons among MPK, vLLM, and SGLang are consistent with the profiling results above:
-
-- For prefill at `prompt_len=16`, MPK's modest advantage is consistent with the observed high GPU bubble, but the current data do not establish this as a causal relationship. The advantage decays quickly as the prompt grows, and MPK already falls behind vLLM/SGLang at `prompt_len=32`; this comparison does not identify a unique cause.
-- During decode, MPK does not outperform the CUDA Graph paths in vLLM/SGLang. This agrees with the observation that CUDA Graphs already reduce launch and host-side overhead substantially.
-
-<p align="center">
-  <img src="/images/blog/kernel-launch/mpk_prefill_ttft_all.png" alt="TTFT comparison among MPK, vLLM, and SGLang" style="width: 100%; max-width: 1050px; height: auto;">
-</p>
-<p align="center"><em>Figure 11. Prefill TTFT for MPK, vLLM, and SGLang.</em></p>
+For decode, MPK does not outperform vLLM or SGLang with CUDA Graphs in our measurements. This is consistent with our observation that CUDA Graphs already reduce kernel-launch and host-side overhead effectively.
 
 <p align="center">
   <img src="/images/blog/kernel-launch/mpk_tpot_all_models.png" alt="TPOT comparison among MPK, vLLM, and SGLang" style="width: 100%; max-width: 1050px; height: auto;">
 </p>
-<p align="center"><em>Figure 12. Decode TPOT for MPK, vLLM, and SGLang.</em></p>
+<p align="center"><em>Figure 9. Decode TPOT for MPK, vLLM, and SGLang.</em></p>
 
-In the single-H100 prefill-only slices, every tested model retains at least approximately 10% bubble at `prompt=1k`, with substantially more in the smaller models; at `prompt=256`, every model exceeds approximately 25%. These values are unattributed upper bounds on GPU idle time. Short-to-medium-prompt prefill becomes a viable Megakernel target only if causal analysis shows that an optimizable fraction comes from launch or scheduling.
+## 5. MoE: CUDA Graphs Leave a Larger GPU Bubble
 
-## 6. MoE: CUDA Graphs Leave a Larger Residual Bubble
+Under CUDA Graphs, the residual decode bubble of Qwen3-30B-A3B consistently remains in the 6.7%–9.8% range. We have not investigated the root cause in depth, but two plausible explanations are:
 
-Qwen3-30B-A3B continues to exhibit strong workload dependence under CUDA Graph execution. As the prompt grows from 16 to 8k, the bubble of its prefill-dominant case falls from 43.0% to 3.6%. Its residual decode bubble remains between 6.7% and 9.8%, however, and does not disappear over the tested batch-size range.
+- The execution structure inside the graph differs: routing, dispatch, expert computation, and gather form longer dependency chains, and scheduling or synchronization between nodes may create GPU-idle gaps.
+- A3B indicates that only about 3B parameters are active, so its memory traffic and compute volume are also closer to those of an ultra-small model.
 
-The `d0` rows below include both prefill and the subsequent generation of one token, so their scope differs from the prefill-only slice in Section 4.
-
-| Workload | Case | BS | Prompt | Decode (case ID) | GPU bubble (%) | GPU bubble/request (ms) |
+| Workload | Case | BS | Prompt | Decode | GPU bubble (%) | GPU bubble/request (ms) |
 | --- | --- | ---: | ---: | ---: | ---: | ---: |
-| Prefill | bs1_p16_d0 | 1 | 16 | 0 | 43.0% | 10.67 |
-| Prefill | bs1_p256_d0 | 1 | 256 | 0 | 25.7% | 7.41 |
-| Prefill | bs1_p1k_d0 | 1 | 1024 | 0 | 19.0% | 7.00 |
-| Prefill | bs1_p4k_d0 | 1 | 4096 | 0 | 7.5% | 7.59 |
-| Prefill | bs1_p8k_d0 | 1 | 8192 | 0 | 3.6% | 8.04 |
 | BS=1 decode | bs1_p16_d128 | 1 | 16 | 128 | 9.4% | 56.92 |
 | BS=1 decode | bs1_p16_d512 | 1 | 16 | 512 | 8.0% | 190.17 |
 | BS=1 decode | bs1_p8k_d512 | 1 | 8192 | 512 | 6.7% | 184.23 |
@@ -282,29 +240,38 @@ The `d0` rows below include both prefill and the subsequent generation of one to
 | Batch decode | bs16_p16_d128 | 16 | 16 | 128 | 9.6% | 67.56 |
 | Batch decode | bs16_p16_d512 | 16 | 16 | 512 | 8.7% | 245.46 |
 
-These results quantify the difference between MoE and large dense models. CUDA Graphs substantially reduce submission overhead, but most of the MoE residual bubble lies outside the launch API intervals being counted. Its cause still requires event correlation; the residual is a theoretical bound for any optimization that eliminates GPU idle, not a directly attainable speedup.
+## 6. Conclusion
 
-## 7. Conclusion: Optimize the Residual Bubble, Not Kernel Count Itself
+**Restricting our assessment to Megakernel's core motivation that “reducing kernel count lowers launch and host-side overhead,” we find that this motivation does not hold.**
 
-The experiments do not support treating “fewer kernels” as sufficient motivation for a Megakernel across all workloads:
+The central conclusion is that, for decode, CUDA Graphs reduce host launch API calls to 17–18 per step and lower GPU bubble to approximately 1%–3% for medium-to-large dense models. **Megakernels can certainly reduce kernel-launch overhead and CPU-launch overhead, but CUDA Graphs already perform well enough:**
 
-1. **Graph-compatible decode has limited headroom.** CUDA Graphs reduce host launch API calls to 17–18 per step and lower the bubble to approximately 1%–3% for medium-to-large dense models. Any potential gain from further migration into a GPU runtime must offset the additional scheduling and synchronization cost.
-2. **Prefill varies with prompt length.** The observed bubble is larger for short prompts; as prompts grow, GPU kernels become longer and the bubble falls, consistent with fixed system costs being amortized.
-3. **Small models and MoE retain larger residuals, but attribution is still required.** Even with CUDA Graphs enabled, some cases retain GPU bubble on the order of 10%. The next step is to identify its source, then test whether GPU-side scheduling can recover the optimizable portion.
-4. **The evaluation is limited to a single GPU.** All results come from one H100 and have not been extended to multi-GPU execution. Single-GPU serving of small models provides relatively little GPU work per step, making it a stress case with a high residual bubble in this study. Multi-GPU serving typically targets larger models and greater aggregate computation, while also introducing collective communication and cross-device synchronization. Communication may dominate or reshape GPU idle time, but that hypothesis cannot be inferred directly from these single-GPU results and requires multi-GPU traces.
-5. **A Megakernel's differentiating value may lie beyond the launch path.** CUDA Graphs reduce the bubble of medium-to-large dense decode to approximately 1%–3%, sharply narrowing the headroom available from fewer host launches alone. This suggests—but does not establish—that the Megakernel benefits most worth testing may come from communication–computation fusion and cross-operator weight prefetching, rather than from kernel-launch reduction itself. Separating these mechanisms requires targeted ablations.
+1. **First, SGLang already hides kernel-launch overhead effectively behind kernel execution.**
+2. **Second, after enabling CUDA Graphs, the number of host launch API calls per decode step is already sufficiently small, and the remaining unhidden kernel-launch and host-synchronization overhead is also sufficiently low.**
 
-A Megakernel should therefore do more than minimize kernel count: it should first identify the source of the residual GPU bubble after CUDA Graph optimization, then use multi-GPU traces and mechanism-level ablations to show that communication–computation fusion or weight prefetching can recover the optimizable portion at a cost below that benefit ceiling.
+**At this point, abandoning CPU-side control and moving scheduling entirely into the GPU runtime to recover roughly 2% host-synchronization overhead may instead reduce serving-system performance by introducing more complex GPU scheduling and synchronization. The tradeoff is unlikely to be worthwhile.**
+
+In addition, this evaluation is limited to a single GPU: all results were obtained on one H100 and have not been extended to multi-GPU execution. In theory, single-GPU serving of small models is precisely the scenario with the largest GPU bubble. Multi-GPU serving typically involves larger models and more computation, while GPU bubbles are often caused by communication rather than launch overhead.
+
+## 7. Implications
+
+**The core differentiating value of Megakernels does not lie on the launch path.** We attribute it to:
+
+- communication–computation fusion;
+- weight prefetching;
+- fine-grained pipelining across kernel boundaries and on-chip residency.
+
+We will explore these directions in future experiments.
 
 <hr class="blog-lang-split">
 
-**TL;DR.** 在单卡 H100 上，CUDA Graph 将每个 decode step 的 host launch API 调用数降至 17–18 次，并把中大型 dense model 的 GPU bubble 压到约 1%–3%。因此，对适用 CUDA Graph 的 decode workload，MegaKernel 仅靠进一步减少 kernel 数量，收益上限有限。较大的 residual bubble 出现在短 prompt prefill、小模型和 MoE；这些场景在 CUDA Graph 下仍可保留 10% 量级的 GPU 空闲。
+
+**TL;DR.** 在单卡 H100 上，CUDA Graph 将每个 decode step 的 host launch API 调用数降至 17–18 次，并把中大型 dense model 的 GPU bubble 压到约 1%–3%。因此，对适用 CUDA Graph 的 decode workload，MegaKernel 仅靠进一步减少 kernel 数量，收益上限有限。
 
 MegaKernel 的一个核心论点是：减少 kernel 数量可以降低 launch 与 host-side 开销。我们用 Nsight Systems trace 量化 GPU activity、launch API 以及 GPU idle，并回答三个问题：
 - 这些指标应如何定义？
 - 它们在不同模型与 workload 中有多大？
 - 在 CUDA Graph 已经可用时，MegaKernel 还剩多少理论空间？
-
 
 ## 1. 从 Kernel Launch 到 GPU Bubble
 
@@ -346,15 +313,13 @@ CPU 是命令生产者，GPU 是消费者。两者的相对速率决定 launch-p
 
 ### 2.1 指标
 
-| 指标                       | 定义与解释                                                                                                                                                                     |
-| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `e2e_ms`                 | 捕获窗口内 host runtime API 事件的 `max(end) - min(start)`，近似被测 `generate()` 的端到端墙钟时间；prefill-only slice 使用单独的截断边界。                                                               |
-| `total_kernel_gpu_ms`    | 所有 kernel duration 的简单求和。多 stream 重叠会被重复计时，因此该值可能大于 `e2e_ms`，不能视为 GPU busy time。                                                                                          |
-| `launch_overhead_ms`     | `cudaLaunchKernel*`、`cudaGraphLaunch*` 与 `cuLaunchKernel*` 的 host API duration 之和。队列空闲时单次通常为 2–10 μs；command-buffer backpressure 会把它放大到 ms 甚至 s 级。该指标既可能高估，也可能低估真实关键路径损失。 |
-| `gpu_busy_ms`            | Kernel、memcpy、memset 等全部 GPU activity 时间区间的并集；重叠区间只计一次，故 `gpu_busy_ms <= e2e_ms`。                                                                                         |
-| `gpu_bubble_ratio`       | 端到端窗口内没有 GPU activity 的比例。它观测 system-level idle，但不单独识别 launch、scheduler、framework、同步或 GPU queueing 的因果贡献。                                                                 |
-| `unhidden_launch_api_ms` | Launch API 区间与 GPU idle 区间的交集，是暴露 launch wall time 的代理指标，而非已证明的关键路径因果损失。                                                                                                  |
-| `other_host_idle_ms`     | 按 `gpu_bubble_ms - unhidden_launch_api_ms` 定义的 idle time。D2H copy、sampling、scheduler、attention metadata planning、Python runtime 与 GPU-side queueing 都只是可能来源。              |
+| 指标                       | 定义与解释                                                                                                                           |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------- |
+| `e2e_ms`                 | 端到端时延                                                                                                                           |
+| `gpu_busy_ms`            | Kernel、memcpy、memset 等全部 GPU activity 时间区间的并集；重叠区间只计一次，`gpu_busy_ms <= e2e_ms`。                                                 |
+| `gpu_bubble_ratio`       | 端到端窗口内没有 GPU activity 的比例。它观测 system-level idle，但不单独识别 launch、scheduler、framework、同步或 GPU queueing 的因果贡献。                       |
+| `unhidden_launch_api_ms` | Launch 操作未被 GPU activity 掩盖的时间。                                                                                                 |
+| `other_host_idle_ms`     | Host 在 kernel launch 之外的其他开销，D2H copy、sampling、scheduler、attention metadata planning、Python runtime 与 GPU-side queueing 都是可能来源。 |
 
 核心关系为：
 
@@ -367,7 +332,7 @@ gpu_bubble_ratio
   = gpu_bubble_ms / e2e_ms
 ```
 
-这里用 GPU activity 区间的并集，而不是可能重复计算并发操作的 duration 之和。我们使用的 vastai 实验平台不开放所需的硬件计数器，因此未采用 SM utilization；本文关注的也是 system-level idle，而非单个 kernel 的 SM 效率。
+我们使用的 Vastai 实验平台不开放所需的硬件计数器，因此未采用 SM utilization；本 blog 关注的也是 system-level idle，而非单个 kernel 的 SM 效率。
 
 ### 2.2 实验设置
 
@@ -409,22 +374,27 @@ gpu_bubble_ratio
 | Qwen3-30B-A3B |   88.1% → 7.8% |       7.73× |    35.62 → 4.61 |               822.5 → 17.0 |
 | Qwen3.5-27B   |   54.8% → 1.6% |       2.21× |   43.33 → 19.63 |               975.5 → 18.0 |
 
-| Model | GPU bubble/step (ms) | Unhidden launch API/step (ms) | Non-launch idle residual/step (ms) |
-| --- | ---: | ---: | ---: |
-| Qwen3-0.6B | 7.36 → 0.22 | 1.164 → 0.077 | 6.20 → 0.14 |
-| Qwen3-1.7B | 6.66 → 0.20 | 1.132 → 0.036 | 5.53 → 0.16 |
-| Qwen3-8B | 5.17 → 0.16 | 0.929 → 0.014 | 4.24 → 0.14 |
-| Qwen3-14B | 4.34 → 0.22 | 0.677 → 0.014 | 3.66 → 0.21 |
-| Qwen3-30B-A3B | 31.37 → 0.36 | 3.050 → 0.066 | 28.32 → 0.29 |
-| Qwen3.5-27B | 23.73 → 0.32 | 2.244 → 0.014 | 21.49 → 0.31 |
+| Model         | GPU bubble/step (ms) | Unhidden launch API/step (ms) | Non-launch idle residual/step (ms) |
+| ------------- | -------------------: | ----------------------------: | ---------------------------------: |
+| Qwen3-0.6B    |          7.36 → 0.22 |                 1.164 → 0.077 |                        6.20 → 0.14 |
+| Qwen3-1.7B    |          6.66 → 0.20 |                 1.132 → 0.036 |                        5.53 → 0.16 |
+| Qwen3-8B      |          5.17 → 0.16 |                 0.929 → 0.014 |                        4.24 → 0.14 |
+| Qwen3-14B     |          4.34 → 0.22 |                 0.677 → 0.014 |                        3.66 → 0.21 |
+| Qwen3-30B-A3B |         31.37 → 0.36 |                 3.050 → 0.066 |                       28.32 → 0.29 |
+| Qwen3.5-27B   |         23.73 → 0.32 |                 2.244 → 0.014 |                       21.49 → 0.31 |
 
-结果给出三个直接结论：
+我们分析得到以下结论：
+1. Eager decode 中，`other_host_idle_ms` 显著大于 `unhidden_launch_api_ms`，这说明系统瓶颈不是裸 kernel launch API 时间本身，而是 launch API 之间的 scheduler / sampling / sync / framework 逻辑让 GPU 等待。
+2. 从 Eager 到 CUDA Graph，e2e speedup 非常显著，小模型和 MoE decode 最 launch/host-bound，因此 speedup 最大；更大的 dense model 下使用 CUDA Graph 的收益会降低，但依然足够显著。
+3. CUDA Graph 将每步 launch API 调用数从 375–976 次降至 17–18 次，CUDA Graph 显著降低了 GPU bubble time。以 Qwen3-8B 为例，开启 CUDA Graph 后的，GPU bubble 仅有 2.4%。
+4. Dense model 的 CG bubble 已降至 1.6%–2.4%，但超小模型和 MoE 仍有 7.8%–14.0%。这在一定程度上印证了为什么现在大多数 MegaKernel 仅对超小模型测试并起作用，以及为什么 MegaMoE 这类工作是有意义的。
 
-1. Eager decode 中，`other_host_idle_ms` 显著大于 `unhidden_launch_api_ms`：大部分 GPU idle 发生在 host 未执行所统计 launch API 的区间。仅凭该残差，无法继续区分 scheduler、sampling、同步、framework 或 GPU-side queueing 的贡献。
-2. CUDA Graph 将每步 launch API 调用数从 375–976 次降至 17–18 次。以 Qwen3-8B 为例，CG 下暴露的 launch 时间仅为 0.014 ms，约占 6.45 ms TPOT 的 0.2%；other host idle 为 0.14 ms，约占 2%。
-3. 中大型 dense model 的 CG bubble 已降至 1.6%–2.4%，但小模型和 MoE 仍有 7.8%–14.0%。因此，“剩余空间有限”适用于前者，不能泛化到所有模型。
 
-对 graph-compatible decode，CG 后的 GPU bubble 是任何消除 GPU idle 的优化都不可能超过的理论时间上界；其中只有经因果归因后确认与 launch 或调度相关的部分，才可能由 MegaKernel 回收。GPU-side scheduler 与同步机制还必须计入自身成本。
+**What about MegaKernel？**
+**MegaKernel 当然可以节省 Kernel Launch Overhead / CPU Launch Overhead，但是 CUDA Graph 已经做的足够好。**
+1. **一方面，SGLang 本身就让 Kernel Launch 很好地被 kernel 的执行所掩盖；**
+2. **另一方面，使用 CUDA Graph 之后，单次 decode 所启动的 kernel 数量已经足够少了，未能掩盖的 Kernel Launch 以及 host 同步开销也已经足够小了。**
+**此时，为了 2% 级别的 host 同步开销，进而将 CPU 侧控制逻辑放弃，完全进入 GPU Runtime 调度，反而可能因为引入更复杂的 GPU 调度/同步逻辑，导致 Serving System 的性能下降，这是得不偿失的。**
 
 ### 3.2 长上下文，BS=1
 
@@ -460,7 +430,10 @@ gpu_bubble_ratio
 | Qwen3-30B-A3B | 33.86 → 0.35 | 3.269 → 0.064 | 30.60 → 0.28 |
 | Qwen3.5-27B | 15.34 → 0.27 | 1.541 → 0.013 | 13.80 → 0.26 |
 
-上下文增长时，KV read 与 GPU 工作变长，bubble ratio 随之下降；这一趋势与固定系统开销被摊薄的解释一致，但 residual 来源尚未分解。Qwen3-14B 的 CG speedup 从短上下文的 1.37× 降至 1.09×；小模型与 MoE 仍获得显著的 eager → CG 加速，Qwen3-0.6B 和 Qwen3-30B-A3B 分别为 4.73× 与 7.25×，表明它们对 graph capture 更敏感。
+
+结果显示，长上下文 KV read 会摊薄一部分 launch/host bubble，但不会完全消除。对较大的 dense model，prompt 从 16 增加到 8k 后，decode 更接近 GPU/KV-read-bound：例如 Qwen3-14B 的 speedup 从 1.37x 降到 1.09x，说明 CUDA Graph 的增量空间已经降低了不少。但小模型和 MoE 仍然明显 launch/host-bound：Qwen3-0.6B 仍有 4.73x speedup，Qwen3-30B-A3B 仍有 7.25x speedup。
+
+**claim 依旧是：在 CUDA Graph decode 上，即使 decode 的上下文较长，CUDA Graph 依然可以极大降低 Kernel Launch Overhead 和 Host Overhead，MegaKernel 通过减少 Kernel 的数量来减少 Kernel Launch Overhead + Host Overhead 的收益上限不高。**
 
 ### 3.3 Batch Sweep
 
@@ -491,96 +464,57 @@ Batch 增大是否会自然隐藏 launch/host 开销？图 8 给出 decode=128/5
 | Qwen3-30B-A3B | 34.32 → 0.44 | 3.366 → 0.080 | 30.95 → 0.36 |
 | Qwen3.5-27B | 26.53 → 0.10 | 2.779 → 0.004 | 23.75 → 0.09 |
 
-在本测试的 BS 范围内，BS=8 与 BS=1 的趋势一致：小模型和 MoE 仍有显著的 eager → CG 加速，而较大的 dense model 收益较低。增大 batch 本身不足以消除这些场景对 graph capture 的敏感性。
 
-## 4. Prefill：GPU Bubble 随 Prompt Length 变化
+BS=8 的观察和 BS=1 decode=512 基本一致，对于 decode 而言，batch 变大不会消除 cudagraph 的价值，
 
-Qwen3 系列在 SGLang 中默认使用 piecewise CUDA Graph；Qwen3.5-27B 则回退到不使用 piecewise graph 的路径。该差异是解释结果时的重要边界。
+## 4. 与 MPK e2e 结果的对应关系
 
-<p align="center">
-  <img src="/images/blog/kernel-launch/fig3_prefill_bubble.png" alt="GPU bubble ratio for batch-one prefill" style="width: 100%; max-width: 780px; height: auto;">
-</p>
-<p align="center"><em>图 9. BS=1 prefill 的 GPU bubble ratio。</em></p>
+此前 MPK、vLLM 与 SGLang 的 TPOT 对比与上述 profiling 一致。
+针对 decode，在我们的实测中，MPK 干不过 vLLM/SGLang CUDA Graph，这同样和我们观察到的 "`CUDA Graph` 已经能有效地降低 Kernel Launch 和 Host Overhead" 这一现象是相符的，
 
-<p align="center">
-  <img src="/images/blog/kernel-launch/fig3_prefill_e2e.png" alt="End-to-end latency for batch-one prefill" style="width: 100%; max-width: 780px; height: auto;">
-</p>
-<p align="center"><em>图 10. BS=1 prefill 的端到端延迟。</em></p>
 
-以 BS=1、prompt=8k 的 prefill 测量为例（Qwen3 系列使用 piecewise CUDA Graph，Qwen3.5-27B 为 fallback 路径）：
-
-| Model | Prefill-slice E2E (ms) | Host launch API calls/slice | `cudaGraphLaunch` calls/slice |
-| --- | ---: | ---: | ---: |
-| Qwen3-0.6B | 51.11 | 168 | 29 |
-| Qwen3-1.7B | 82.69 | 168 | 29 |
-| Qwen3-8B | 286.74 | 208 | 37 |
-| Qwen3-14B | 483.14 | 228 | 41 |
-| Qwen3-30B-A3B | 221.47 | 220 | 49 |
-| Qwen3.5-27B | 733.65 | 1,683 | 0 |
-
-| Model | GPU bubble/slice (ms) | GPU bubble (%) | Unhidden launch API/slice (ms) | Non-launch idle residual/slice (ms) |
-| --- | ---: | ---: | ---: | ---: |
-| Qwen3-0.6B | 7.47 | 14.6% | 0.21 | 7.26 |
-| Qwen3-1.7B | 8.58 | 10.4% | 0.21 | 8.36 |
-| Qwen3-8B | 6.89 | 2.4% | 0.14 | 6.75 |
-| Qwen3-14B | 6.69 | 1.4% | 0.15 | 6.54 |
-| Qwen3-30B-A3B | 8.09 | 3.7% | 0.18 | 7.92 |
-| Qwen3.5-27B | 11.48 | 1.6% | 0.98 | 10.49 |
-
-Prefill bubble 随 prompt length 显著变化：短 prompt 的 observed bubble 较高；prompt 增长时，GEMM 与 attention 变长，bubble ratio 下降。这一趋势与固定系统开销被摊薄一致，但 residual 来源尚未分解。到 prompt=8k，Qwen3-8B、Qwen3-14B 与 Qwen3.5-27B 的 bubble 已降至 1%–3%，而 Qwen3-0.6B/1.7B 仍为 10.4%–14.6%。中短 prompt 与较小模型因而构成待进一步归因的候选优化区间。
-
-## 5. 与 MPK 端到端结果的对应关系
-
-此前 MPK、vLLM 与 SGLang 的 TTFT/TPOT 对比与上述 profiling 一致：
-
-- 在 `prompt_len=16` 的 prefill 中，MPK 的小幅优势与较高 GPU bubble 的观察一致，但现有数据不能单独建立因果关系。该优势随 prompt 增长快速衰减，`prompt_len=32` 时已落后于 vLLM/SGLang；当前对比不能确定唯一原因。
-- 在 decode 中，MPK 未能超过 vLLM/SGLang 的 CUDA Graph 路径。这与 CUDA Graph 已显著压低 launch/host overhead 的测量结果一致。
-
-<p align="center">
-  <img src="/images/blog/kernel-launch/mpk_prefill_ttft_all.png" alt="TTFT comparison among MPK, vLLM, and SGLang" style="width: 100%; max-width: 1050px; height: auto;">
-</p>
-<p align="center"><em>图 11. MPK、vLLM 与 SGLang 的 prefill TTFT。</em></p>
 
 <p align="center">
   <img src="/images/blog/kernel-launch/mpk_tpot_all_models.png" alt="TPOT comparison among MPK, vLLM, and SGLang" style="width: 100%; max-width: 1050px; height: auto;">
 </p>
-<p align="center"><em>图 12. MPK、vLLM 与 SGLang 的 decode TPOT。</em></p>
+<p align="center"><em>图 9. MPK、vLLM 与 SGLang 的 decode TPOT。</em></p>
 
-单卡 H100 的 prefill-only slice 中，`prompt=1k` 时所有测试模型仍至少有约 10% bubble，小模型显著更高；`prompt=256` 时各模型均超过约 25%。这些是待归因的 GPU idle 上界；若其中可优化部分确由 launch 或调度造成，中短 prompt prefill 才可能成为 MegaKernel 的有效优化区间。
 
-## 6. MoE：CUDA Graph 后仍有较大的 Residual Bubble
+## 5. MoE：CUDA Graph 后仍有较大的 GPU Bubble
 
-Qwen3-30B-A3B 在 CUDA Graph 模式下仍明显随 workload 变化。Prefill-dominant case 的 bubble 随 prompt 从 16 增至 8k，由 43.0% 降至 3.6%；decode 的残余 bubble 则稳定在 6.7%–9.8%，且在测试的 batch 范围内没有消失。
+Qwen3-30B-A3B 在 CUDA Graph 模式下，decode 的残余 bubble 依然稳定在 6.7%–9.8%；我们没有深入分析，但可以预见的原因是：
+- graph 内部的执行结构不同，routing、dispatch、专家计算和 gather 等更长的依赖链，其节点间调度与同步可能产生 GPU 空闲。
+- A3B -> 激活参数本来就小，访存量/计算量方面也是超小模型量级。
 
-下表中的 `d0` 行包含 prefill 和随后生成的 1 个 token，数值口径与第 4 节的 prefill-only slice 不同。
+| Workload     | Case          |  BS | Prompt | Decode | GPU bubble (%) | GPU bubble/request (ms) |
+| ------------ | ------------- | --: | -----: | -----: | -------------: | ----------------------: |
+| BS=1 decode  | bs1_p16_d128  |   1 |     16 |    128 |           9.4% |                   56.92 |
+| BS=1 decode  | bs1_p16_d512  |   1 |     16 |    512 |           8.0% |                  190.17 |
+| BS=1 decode  | bs1_p8k_d512  |   1 |   8192 |    512 |           6.7% |                  184.23 |
+| Batch decode | bs4_p16_d128  |   4 |     16 |    128 |           9.4% |                   62.37 |
+| Batch decode | bs4_p16_d512  |   4 |     16 |    512 |           9.0% |                  235.16 |
+| Batch decode | bs8_p16_d128  |   8 |     16 |    128 |           9.8% |                   66.03 |
+| Batch decode | bs8_p16_d512  |   8 |     16 |    512 |           8.8% |                  232.38 |
+| Batch decode | bs16_p16_d128 |  16 |     16 |    128 |           9.6% |                   67.56 |
+| Batch decode | bs16_p16_d512 |  16 |     16 |    512 |           8.7% |                  245.46 |
 
-| Workload | Case | BS | Prompt | Decode (case ID) | GPU bubble (%) | GPU bubble/request (ms) |
-| --- | --- | ---: | ---: | ---: | ---: | ---: |
-| Prefill | bs1_p16_d0 | 1 | 16 | 0 | 43.0% | 10.67 |
-| Prefill | bs1_p256_d0 | 1 | 256 | 0 | 25.7% | 7.41 |
-| Prefill | bs1_p1k_d0 | 1 | 1024 | 0 | 19.0% | 7.00 |
-| Prefill | bs1_p4k_d0 | 1 | 4096 | 0 | 7.5% | 7.59 |
-| Prefill | bs1_p8k_d0 | 1 | 8192 | 0 | 3.6% | 8.04 |
-| BS=1 decode | bs1_p16_d128 | 1 | 16 | 128 | 9.4% | 56.92 |
-| BS=1 decode | bs1_p16_d512 | 1 | 16 | 512 | 8.0% | 190.17 |
-| BS=1 decode | bs1_p8k_d512 | 1 | 8192 | 512 | 6.7% | 184.23 |
-| Batch decode | bs4_p16_d128 | 4 | 16 | 128 | 9.4% | 62.37 |
-| Batch decode | bs4_p16_d512 | 4 | 16 | 512 | 9.0% | 235.16 |
-| Batch decode | bs8_p16_d128 | 8 | 16 | 128 | 9.8% | 66.03 |
-| Batch decode | bs8_p16_d512 | 8 | 16 | 512 | 8.8% | 232.38 |
-| Batch decode | bs16_p16_d128 | 16 | 16 | 128 | 9.6% | 67.56 |
-| Batch decode | bs16_p16_d512 | 16 | 16 | 512 | 8.7% | 245.46 |
 
-这组结果量化了 MoE 与大型 dense model 的差异：CUDA Graph 已显著降低提交开销，但 MoE 的 residual bubble 大部分位于所统计 launch API 区间之外。其根因仍需 event correlation；该 residual bubble 是所有消除 GPU idle 优化的理论上界，而不是可直接获得的加速比。
+## 6. 结论
 
-## 7. 结论：优化目标应是残余 Bubble，而非 Kernel 数量本身
+**只针对 MegaKernel 的 ”减少 kernel 数量可以降低 launch 与 host-side 开销“ 这一核心 motivation，我们认为该 motivation 站不住脚。**
 
-实验不支持把“减少 kernel 数量”视为 MegaKernel 在所有 workload 上的充分动机：
+核心结论在于：针对 decode，CUDA Graph 已将 host launch API 调用数降至每步 17–18 次，并把中大型 dense model 的 bubble 压至约 1%–3%。**MegaKernel 当然可以节省 Kernel Launch Overhead / CPU Launch Overhead，但是 CUDA Graph 已经做的足够好：**
+1. **一方面，SGLang 本身就让 Kernel Launch 很好地被 kernel 的执行所掩盖；**
+2. **另一方面，使用 CUDA Graph 之后，单次 decode 所启动的 kernel 数量已经足够少了，未能掩盖的 Kernel Launch 以及 host 同步开销也已经足够小了。**
+**此时，为了 2% 级别的 host 同步开销，进而将 CPU 侧控制逻辑放弃，完全进入 GPU Runtime 调度，反而可能因为引入更复杂的 GPU 调度/同步逻辑，导致 Serving System 的性能下降，这是得不偿失的
 
-1. **Graph-compatible decode：空间有限。** CUDA Graph 已将 host launch API 调用数降至每步 17–18 次，并把中大型 dense model 的 bubble 压至约 1%–3%。进一步迁移到 GPU runtime 的潜在收益必须覆盖新增调度与同步成本。
-2. **Prefill：随 prompt length 变化。** 短 prompt 的 observed bubble 较大；prompt 增长后 GPU kernel 变长、bubble 下降，这与固定系统开销被摊薄的解释一致。
-3. **小模型与 MoE：残差更大，但仍需归因。** 即使启用 CUDA Graph，部分 case 仍保留 10% 量级的 bubble。应先定位其来源，再评估 GPU-side scheduling 能否回收其中可优化的部分。
-4. **实验范围仅限单卡。** 本文所有结果均来自单卡 H100，尚未扩展到多卡。单卡小模型每步 GPU 工作较少，是本实验中 residual bubble 较高的一类压力场景。多卡 serving 通常面向更大的模型和更高的总计算量，同时引入 collective communication 与跨设备同步；通信可能主导或重塑 GPU idle，但这一假设不能由当前单卡结果直接推出，仍需多卡 trace 验证。
-5. **MegaKernel 的差异化价值可能不在启动侧。** CUDA Graph 已把中大型 dense decode 的 bubble 压至约 1%–3%，显著收窄了仅靠减少 host launch 可获得的空间。这表明——但尚未证明——MegaKernel 更值得验证的收益来源可能是通算融合与跨算子 weight prefetch，而非单纯减少 kernel launch。区分这些机制仍需针对性消融。
+此外，实验范围仅限单卡，本文所有结果均来自单卡 H100，尚未扩展到多卡。不过，单卡 serve 小模型理论上就是 GPU bubble 最大的场景，多卡场景往往模型较大、计算量较大，GPU bubble 往往由通信造成，而非启动开销。
 
-因此，MegaKernel 不应只最小化 kernel count，而应先定位 CUDA Graph 后 residual GPU bubble 的来源，再通过多卡 trace 与机制级消融，证明通算融合或 weight prefetch 能以低于收益上界的成本回收其中可优化的部分。
+## 7. 启示 
+
+**MegaKernel 的核心差异化价值不在启动侧。** 我们将其归在：
+- 通算融合；
+- weight prefetch；
+- 打破 kernel 边界的细粒度流水以及片上驻留。
+
+后续，我们将围绕这些方面，展开实验。
