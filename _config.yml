@@ -292,7 +292,6 @@ defaults:
       type: blogs
     values:
       layout: blog
-      author_profile: true
 
 
 # Sass/SCSS
