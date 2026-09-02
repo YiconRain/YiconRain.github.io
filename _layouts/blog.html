@@ -22,14 +22,15 @@ layout: single
   }
 </style>
 
-{% assign parts = content | split: '<hr class="blog-lang-split">' %}
+{% assign parts = content | split: '<hr class="blog-lang-split"' %}
 
 {% if parts.size > 1 %}
+  {% assign zh_html = parts[1] | remove_first: ' />' %}
   <div class="blog-lang-toggle">
     <button id="blog-lang-btn" type="button" aria-label="Switch language"></button>
   </div>
   <div id="blog-lang-en" lang="en">{{ parts[0] }}</div>
-  <div id="blog-lang-zh" lang="zh" hidden>{{ parts[1] }}</div>
+  <div id="blog-lang-zh" lang="zh" hidden>{{ zh_html }}</div>
 
   <script>
   (function () {
